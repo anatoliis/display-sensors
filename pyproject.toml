@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "display-sensors"
+version = "0.1.0"
+description = ""
+authors = []
+packages = [{ include = "display_sensors" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+orjson = "^3.10.9"
+pyserial = "^3.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
