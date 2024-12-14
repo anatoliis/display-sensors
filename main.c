@@ -9,10 +9,17 @@
 #include <termios.h>
 #include <unistd.h>
 
-#define UPDATE_INTERVAL 5
 #define DEVICE_RECONNECT_DELAY 10
+#define SYSTEM_CONFIG_FILE "/etc/display-sensors/config.txt"
+#define LOCAL_CONFIG_FILE "config.txt"
 
 const char *DEVICE_ID = "1a86";
+
+int update_interval = 5;
+char *cpu_path = NULL;
+char *gpu_edge_path = NULL;
+char *gpu_mem_path = NULL;
+char *nvme_path = NULL;
 
 int serial_fd = -1;
 
@@ -22,6 +29,93 @@ int prev_nvme_temp = 0;
 
 static inline int max(int a, int b) {
     return (a > b) ? a : b;
+}
+
+const char *find_config_file() {
+    if (access(LOCAL_CONFIG_FILE, R_OK) == 0) {
+        return LOCAL_CONFIG_FILE;
+    }
+
+    if (access(SYSTEM_CONFIG_FILE, R_OK) == 0) {
+        return SYSTEM_CONFIG_FILE;
+    }
+
+    return NULL;
+}
+
+void read_config_file() {
+    const char *config_file = find_config_file();
+
+
+    if (!config_file) {
+        printf("Error: Unable to open the configuration file '%s'\n\n", config_file);
+        printf(
+            "Make sure it exists under one of the following paths:\n"
+            "\t./config.txt\n"
+            "\t/etc/display-sensors/config.txt\n"
+        );
+        exit(1);
+    }
+
+    FILE *file = fopen(config_file, "r");
+    if (!file) {
+        printf("Error: Cannot open the configuration file: %s\n\n", config_file);
+        printf("Please make sure a config file has the following content:\n");
+        printf(
+            "\tcpu_path=/sys/class/hwmon/hwmon4/temp1_input\n"
+            "\tgpu_edge_path=/sys/class/hwmon/hwmon2/temp2_input\n"
+            "\tgpu_mem_path=/sys/class/hwmon/hwmon2/temp3_input\n"
+            "\tnvme_path=/sys/class/hwmon/hwmon1/temp3_input\n"
+            "\tupdate_interval=5\n"
+        );
+        exit(1);
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        char *newline = strchr(line, '\n');
+        if (newline) {
+            *newline = '\0';
+        }
+
+        char *key = strtok(line, "=");
+        char *value = strtok(NULL, "=");
+
+        if (key && value) {
+            if (strcmp(key, "cpu_path") == 0) {
+                cpu_path = strdup(value);
+            } else if (strcmp(key, "gpu_edge_path") == 0) {
+                gpu_edge_path = strdup(value);
+            } else if (strcmp(key, "gpu_mem_path") == 0) {
+                gpu_mem_path = strdup(value);
+            } else if (strcmp(key, "nvme_path") == 0) {
+                nvme_path = strdup(value);
+            } else if (strcmp(key, "update_interval") == 0) {
+                char *endptr;
+                int _update_interval = strtol(value, &endptr, 10);
+                if (*endptr != '\0' || _update_interval <= 0) {
+                    printf("Error: Invalid 'update_interval' value in the configuration file. It must be a positive integer.\n");
+                    fclose(file);
+                    exit(1);
+                }
+                update_interval = _update_interval;
+            }
+        }
+    }
+
+    fclose(file);
+
+    if (!cpu_path || !gpu_edge_path || !gpu_mem_path || !nvme_path) {
+        printf("Error: Missing entries in the configuration file.\n\nPlease ensure it has the following format:\n\n");
+        printf(
+            "cpu_path=/sys/class/hwmon/hwmon4/temp1_input\n"
+            "gpu_edge_path=/sys/class/hwmon/hwmon2/temp2_input\n"
+            "gpu_mem_path=/sys/class/hwmon/hwmon2/temp3_input\n"
+            "nvme_path=/sys/class/hwmon/hwmon1/temp3_input\n"
+            "update_interval=5\n"
+        );
+        exit(1);
+    }
 }
 
 const char *find_device() {
@@ -198,6 +292,8 @@ int main() {
     signal(SIGTERM, handle_terminate_signal);
     int reconnect = 0;
 
+    read_config_file();
+
     while (1) {
         const char *device = find_device();
         if (!device) {
@@ -255,7 +351,7 @@ int main() {
                 close_serial_port();
                 break;
             }
-            sleep(UPDATE_INTERVAL);
+            sleep(update_interval);
         }
     }
 
