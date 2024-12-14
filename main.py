@@ -4,8 +4,8 @@ import time
 import serial
 import serial.tools.list_ports
 
-UPDATE_INTERVAL = 2
-DEVICE_RECONNECT_DELAY = 3
+UPDATE_INTERVAL = 3
+DEVICE_RECONNECT_DELAY = 4
 DEVICES_IDS = ["USB VID:PID=1A86:55D4", "USB VID:PID=1A86:7523"]
 
 

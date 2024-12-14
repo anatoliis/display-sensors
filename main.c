@@ -9,8 +9,8 @@
 #include <termios.h>
 #include <unistd.h>
 
-#define UPDATE_INTERVAL 3
-#define DEVICE_RECONNECT_DELAY 3
+#define UPDATE_INTERVAL 5
+#define DEVICE_RECONNECT_DELAY 10
 
 const char *DEVICE_ID = "1a86";
 
@@ -188,13 +188,14 @@ void close_and_exit(int exit_code) {
     exit(exit_code);
 }
 
-void handle_sigint(int sig) {
+void handle_terminate_signal(int sig) {
     printf("Caught signal %d, cleaning up and exiting...\n", sig);
     close_and_exit(0);
 }
 
 int main() {
-    signal(SIGINT, handle_sigint);
+    signal(SIGINT, handle_terminate_signal);
+    signal(SIGTERM, handle_terminate_signal);
     int reconnect = 0;
 
     while (1) {
@@ -217,10 +218,10 @@ int main() {
             if (reconnect) {
                 break;
             }
-            int cpu_temp = read_temperature("/sys/class/hwmon/hwmon2/temp1_input");
+            int cpu_temp = read_temperature("/sys/class/hwmon/hwmon4/temp1_input");
             int gpu_temp = max(
-                read_temperature("/sys/class/hwmon/hwmon4/temp2_input"),
-                read_temperature("/sys/class/hwmon/hwmon4/temp3_input")
+                read_temperature("/sys/class/hwmon/hwmon2/temp2_input"),
+                read_temperature("/sys/class/hwmon/hwmon2/temp3_input")
             );
             int nvme_temp = read_temperature("/sys/class/hwmon/hwmon1/temp3_input");
 
