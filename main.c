@@ -15,9 +15,17 @@
 
 const char *DEVICE_ID = "1a86";
 
-int update_interval = 5;
+int min_update_interval = 0;
+int max_update_interval = 0;
+int min_interval_threshold = 45;
+int max_interval_threshold = 70;
+int update_interval_diff = 0;
+int interval_threshold_diff = 0;
+float update_interval_coef = 0.0;
+float update_interval = 5.;
+
 char *cpu_path = NULL;
-char *gpu_edge_path = NULL;
+char *gpu_junction_path = NULL;
 char *gpu_mem_path = NULL;
 char *nvme_path = NULL;
 
@@ -63,10 +71,11 @@ void read_config_file() {
         printf("Please make sure a config file has the following content:\n");
         printf(
             "\tcpu_path=/sys/class/hwmon/hwmon4/temp1_input\n"
-            "\tgpu_edge_path=/sys/class/hwmon/hwmon2/temp2_input\n"
+            "\tgpu_junction_path=/sys/class/hwmon/hwmon2/temp2_input\n"
             "\tgpu_mem_path=/sys/class/hwmon/hwmon2/temp3_input\n"
             "\tnvme_path=/sys/class/hwmon/hwmon1/temp3_input\n"
-            "\tupdate_interval=5\n"
+            "\tmin_update_interval=1\n"
+            "\nmax_update_interval=5\n"
         );
         exit(1);
     }
@@ -84,37 +93,62 @@ void read_config_file() {
         if (key && value) {
             if (strcmp(key, "cpu_path") == 0) {
                 cpu_path = strdup(value);
-            } else if (strcmp(key, "gpu_edge_path") == 0) {
-                gpu_edge_path = strdup(value);
+            } else if (strcmp(key, "gpu_junction_path") == 0) {
+                gpu_junction_path = strdup(value);
             } else if (strcmp(key, "gpu_mem_path") == 0) {
                 gpu_mem_path = strdup(value);
             } else if (strcmp(key, "nvme_path") == 0) {
                 nvme_path = strdup(value);
-            } else if (strcmp(key, "update_interval") == 0) {
+            } else if (strcmp(key, "min_update_interval") == 0) {
                 char *endptr;
                 int _update_interval = strtol(value, &endptr, 10);
                 if (*endptr != '\0' || _update_interval <= 0) {
-                    printf("Error: Invalid 'update_interval' value in the configuration file. It must be a positive integer.\n");
+                    printf("Error: Invalid 'min_update_interval' value in the configuration file. It must be a positive integer.\n");
                     fclose(file);
                     exit(1);
                 }
-                update_interval = _update_interval;
+                min_update_interval = _update_interval;
+            } else if (strcmp(key, "max_update_interval") == 0) {
+                char *endptr;
+                int _update_interval = strtol(value, &endptr, 10);
+                if (*endptr != '\0' || _update_interval <= 0) {
+                    printf("Error: Invalid 'max_update_interval' value in the configuration file. It must be a positive integer.\n");
+                    fclose(file);
+                    exit(1);
+                }
+                max_update_interval = _update_interval;
+                update_interval = (float)max_update_interval;
             }
         }
     }
 
     fclose(file);
 
-    if (!cpu_path || !gpu_edge_path || !gpu_mem_path || !nvme_path) {
+    if (!cpu_path || !gpu_junction_path || !gpu_mem_path || !nvme_path) {
         printf("Error: Missing entries in the configuration file.\n\nPlease ensure it has the following format:\n\n");
         printf(
             "cpu_path=/sys/class/hwmon/hwmon4/temp1_input\n"
-            "gpu_edge_path=/sys/class/hwmon/hwmon2/temp2_input\n"
+            "gpu_junction_path=/sys/class/hwmon/hwmon2/temp2_input\n"
             "gpu_mem_path=/sys/class/hwmon/hwmon2/temp3_input\n"
             "nvme_path=/sys/class/hwmon/hwmon1/temp3_input\n"
-            "update_interval=5\n"
+            "min_update_interval=1\n"
+            "max_update_interval=5\n"
         );
         exit(1);
+    }
+
+    update_interval_diff = max_update_interval - min_update_interval;
+    interval_threshold_diff = max_interval_threshold - min_interval_threshold;
+    update_interval_coef = (float)update_interval_diff / (float)interval_threshold_diff;
+}
+
+void adjust_update_interval(int temperature) {
+    if (temperature <= min_interval_threshold) {
+        update_interval = (float)max_update_interval;
+    } else if (temperature >= max_interval_threshold) {
+        update_interval = (float)min_update_interval;
+    } else {
+        update_interval = (float)max_update_interval - (float)(temperature - min_interval_threshold) * update_interval_coef;
     }
 }
 
@@ -351,6 +385,7 @@ int main() {
                 close_serial_port();
                 break;
             }
+            adjust_update_interval(max(max(cpu_temp, gpu_temp), nvme_temp));
             sleep(update_interval);
         }
     }

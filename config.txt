@@ -1,5 +1,6 @@
 cpu_path=/sys/class/hwmon/hwmon4/temp1_input
-gpu_edge_path=/sys/class/hwmon/hwmon2/temp2_input
+gpu_junction_path=/sys/class/hwmon/hwmon2/temp2_input
 gpu_mem_path=/sys/class/hwmon/hwmon2/temp3_input
 nvme_path=/sys/class/hwmon/hwmon1/temp3_input
-update_interval=5
+min_update_interval=1
+max_update_interval=4
